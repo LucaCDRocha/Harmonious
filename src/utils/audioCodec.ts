@@ -7,23 +7,29 @@ export const END_FREQUENCY = 2700; // Hz
 export const MINIMUM_VALID_FREQUENCY = 400;
 export const MAXIMUM_VALID_FREQUENCY = 8300;
 
-// Timing constants
-const START_MARKER_DURATION = 0.12; // seconds
-const END_MARKER_DURATION = 0.12; // seconds
-const CHARACTER_DURATION = 0.07; // seconds
-const CHARACTER_GAP = 0.03; // seconds
-const VOLUME = 1.0;
+// Timing constants - Slowed down for whale-like communication
+const START_MARKER_DURATION = 1.5; // seconds (long opening call)
+const END_MARKER_DURATION = 1.5; // seconds (long closing call)
+const CHARACTER_DURATION = 1.2; // seconds (very long sustained tones)
+const CHARACTER_GAP = 0.5; // seconds (long dramatic pauses)
+const VOLUME = 0.85; // Optimized for human ears
 
 // Parallel tone transmission
-const USE_PARALLEL_TONES = true;
-const PARALLEL_TONE_OFFSET = 35; // Hz
-const PARALLEL_TONE_VOLUME = 0.75;
+const USE_PARALLEL_TONES = false;
+const PARALLEL_TONE_OFFSET = 75; // Hz (even larger for deeper harmonics)
+const PARALLEL_TONE_VOLUME = 0.9; // Higher to emphasize rich harmonics
+
+// Whale-like modulation
+const USE_FREQUENCY_SWEEP = true; // Frequency modulation like whale song
+const SWEEP_RANGE = 80; // Hz range for frequency sweep
+const VIBRATO_RATE = 4; // Hz (whale song vibrato)
+const VIBRATO_AMOUNT = 30; // Hz (vibrato depth)
 
 // Detection thresholds
 const FREQUENCY_TOLERANCE = 45;
 const SIGNAL_THRESHOLD = 135;
-const DEBOUNCE_TIME = 75;
-const CHARACTER_LOCKOUT_TIME = 120;
+const DEBOUNCE_TIME = 350; // Increased for slower timing
+const CHARACTER_LOCKOUT_TIME = 1800; // Must cover CHARACTER_DURATION (1.2s) + CHARACTER_GAP (0.5s)
 
 const DEBUG_AUDIO = true;
 
@@ -99,7 +105,14 @@ const playTone = async (
   oscillator.type = 'sine';
   oscillator.frequency.value = frequency;
   
-  const fadeTime = Math.min(0.004, duration / 18);
+  const fadeTime = Math.min(0.02, duration / 6);
+  
+  // Add frequency sweep for whale-like effect
+  if (USE_FREQUENCY_SWEEP && frequency !== START_FREQUENCY && frequency !== END_FREQUENCY) {
+    oscillator.frequency.setValueAtTime(frequency - SWEEP_RANGE / 2, startTime);
+    oscillator.frequency.linearRampToValueAtTime(frequency + SWEEP_RANGE / 2, startTime + duration * 0.7);
+    oscillator.frequency.linearRampToValueAtTime(frequency, startTime + duration);
+  }
   
   gainNode.gain.setValueAtTime(0, startTime);
   gainNode.gain.linearRampToValueAtTime(volume, startTime + fadeTime);
@@ -118,6 +131,13 @@ const playTone = async (
     
     oscillator2.type = 'sine';
     oscillator2.frequency.value = frequency + PARALLEL_TONE_OFFSET;
+    
+    // Add frequency sweep to parallel tone too
+    if (USE_FREQUENCY_SWEEP) {
+      oscillator2.frequency.setValueAtTime(frequency + PARALLEL_TONE_OFFSET - SWEEP_RANGE / 2, startTime);
+      oscillator2.frequency.linearRampToValueAtTime(frequency + PARALLEL_TONE_OFFSET + SWEEP_RANGE / 2, startTime + duration * 0.7);
+      oscillator2.frequency.linearRampToValueAtTime(frequency + PARALLEL_TONE_OFFSET, startTime + duration);
+    }
     
     gainNode2.gain.setValueAtTime(0, startTime);
     gainNode2.gain.linearRampToValueAtTime(PARALLEL_TONE_VOLUME, startTime + fadeTime);
@@ -292,7 +312,7 @@ export const encodeText = async (
 const shouldAddCharacter = (char: string): boolean => {
   const now = Date.now();
   
-  recentCharacters = recentCharacters.filter(entry => (now - entry.time) < 450);
+  recentCharacters = recentCharacters.filter(entry => (now - entry.time) < 2000); // Extended window for longer timing
   
   for (const entry of recentCharacters) {
     if (entry.char === char && (now - entry.time) < CHARACTER_LOCKOUT_TIME) {
