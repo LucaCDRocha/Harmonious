@@ -21,9 +21,9 @@ const PARALLEL_TONE_VOLUME = 0.9; // Higher to emphasize rich harmonics
 
 // Whale-like modulation
 const USE_FREQUENCY_SWEEP = true; // Frequency modulation like whale song
-const SWEEP_RANGE = 80; // Hz range for frequency sweep
+const SWEEP_RANGE = 120; // Hz range for frequency sweep (increased for more dramatic effect)
 const VIBRATO_RATE = 4; // Hz (whale song vibrato)
-const VIBRATO_AMOUNT = 30; // Hz (vibrato depth)
+const VIBRATO_AMOUNT = 50; // Hz (vibrato depth - increased for more noticeable wobble)
 
 // Detection thresholds
 const FREQUENCY_TOLERANCE = 45;
@@ -105,19 +105,33 @@ const playTone = async (
   oscillator.type = 'sine';
   oscillator.frequency.value = frequency;
   
-  const fadeTime = Math.min(0.02, duration / 6);
+  const fadeTime = Math.min(0.1, duration / 3);
   
   // Add frequency sweep for whale-like effect
   if (USE_FREQUENCY_SWEEP && frequency !== START_FREQUENCY && frequency !== END_FREQUENCY) {
-    oscillator.frequency.setValueAtTime(frequency - SWEEP_RANGE / 2, startTime);
-    oscillator.frequency.linearRampToValueAtTime(frequency + SWEEP_RANGE / 2, startTime + duration * 0.7);
-    oscillator.frequency.linearRampToValueAtTime(frequency, startTime + duration);
+    oscillator.frequency.setValueAtTime(frequency, startTime);
+    oscillator.frequency.exponentialRampToValueAtTime(frequency + SWEEP_RANGE, startTime + duration * 0.5);
+    oscillator.frequency.exponentialRampToValueAtTime(frequency, startTime + duration);
+    
+    // Add vibrato modulation on top of sweep
+    const vibratoStartTime = startTime + (duration * 0.1);
+    const vibratoEndTime = startTime + (duration * 0.9);
+    const vibratoCount = Math.floor((vibratoEndTime - vibratoStartTime) * VIBRATO_RATE);
+    
+    for (let i = 0; i < vibratoCount; i++) {
+      const vibTime = vibratoStartTime + (i / VIBRATO_RATE);
+      const vibPhase = (i % 2 === 0) ? VIBRATO_AMOUNT : -VIBRATO_AMOUNT;
+      
+      if (vibTime + (1 / VIBRATO_RATE) <= vibratoEndTime) {
+        oscillator.frequency.exponentialRampToValueAtTime(frequency + vibPhase, vibTime + (1 / (VIBRATO_RATE * 2)));
+      }
+    }
   }
   
   gainNode.gain.setValueAtTime(0, startTime);
-  gainNode.gain.linearRampToValueAtTime(volume, startTime + fadeTime);
+  gainNode.gain.exponentialRampToValueAtTime(volume, startTime + fadeTime);
   gainNode.gain.setValueAtTime(volume, startTime + duration - fadeTime);
-  gainNode.gain.linearRampToValueAtTime(0, startTime + duration);
+  gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
   
   oscillator.connect(gainNode);
   gainNode.connect(audioContext.destination);
@@ -134,15 +148,29 @@ const playTone = async (
     
     // Add frequency sweep to parallel tone too
     if (USE_FREQUENCY_SWEEP) {
-      oscillator2.frequency.setValueAtTime(frequency + PARALLEL_TONE_OFFSET - SWEEP_RANGE / 2, startTime);
-      oscillator2.frequency.linearRampToValueAtTime(frequency + PARALLEL_TONE_OFFSET + SWEEP_RANGE / 2, startTime + duration * 0.7);
-      oscillator2.frequency.linearRampToValueAtTime(frequency + PARALLEL_TONE_OFFSET, startTime + duration);
+      oscillator2.frequency.setValueAtTime(frequency + PARALLEL_TONE_OFFSET, startTime);
+      oscillator2.frequency.exponentialRampToValueAtTime(frequency + PARALLEL_TONE_OFFSET + SWEEP_RANGE, startTime + duration * 0.9);
+      oscillator2.frequency.exponentialRampToValueAtTime(frequency + PARALLEL_TONE_OFFSET, startTime + duration);
+      
+      // Add vibrato modulation to parallel tone too
+      const vibratoStartTime = startTime + (duration * 0.1);
+      const vibratoEndTime = startTime + (duration * 0.9);
+      const vibratoCount = Math.floor((vibratoEndTime - vibratoStartTime) * VIBRATO_RATE);
+      
+      for (let i = 0; i < vibratoCount; i++) {
+        const vibTime = vibratoStartTime + (i / VIBRATO_RATE);
+        const vibPhase = (i % 2 === 0) ? VIBRATO_AMOUNT : -VIBRATO_AMOUNT;
+        
+        if (vibTime + (1 / VIBRATO_RATE) <= vibratoEndTime) {
+          oscillator2.frequency.exponentialRampToValueAtTime(frequency + PARALLEL_TONE_OFFSET + vibPhase, vibTime + (1 / (VIBRATO_RATE * 2)));
+        }
+      }
     }
     
     gainNode2.gain.setValueAtTime(0, startTime);
-    gainNode2.gain.linearRampToValueAtTime(PARALLEL_TONE_VOLUME, startTime + fadeTime);
+    gainNode2.gain.exponentialRampToValueAtTime(PARALLEL_TONE_VOLUME, startTime + fadeTime);
     gainNode2.gain.setValueAtTime(PARALLEL_TONE_VOLUME, startTime + duration - fadeTime);
-    gainNode2.gain.linearRampToValueAtTime(0, startTime + duration);
+    gainNode2.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
     
     oscillator2.connect(gainNode2);
     gainNode2.connect(audioContext.destination);
