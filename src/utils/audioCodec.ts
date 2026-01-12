@@ -43,7 +43,7 @@ const CHAR_FREQUENCIES: { [char: string]: number } = {
   '0': 4700, '1': 4800, '2': 4900, '3': 5000, '4': 5100, '5': 5200, '6': 5300, '7': 5400, '8': 5500, '9': 5600,
   'A': 5700, 'B': 5800, 'C': 5900, 'D': 6000, 'E': 6100, 'F': 6200, 'G': 6300, 'H': 6400, 'I': 6500, 'J': 6600,
   'K': 6700, 'L': 6800, 'M': 6900, 'N': 7000, 'O': 7100, 'P': 7200, 'Q': 7300, 'R': 7400, 'S': 7500, 'T': 7600,
-  'U': 7700, 'V': 7800, 'W': 7900, 'X': 8000, 'Y': 8100, 'Z': 8200,
+  'U': 7700, 'V': 7800, 'W': 7900, 'X': 8000, 'Y': 8100, 'Z': 500,
 };
 
 console.log(`Initialized frequency map for ${Object.keys(CHAR_FREQUENCIES).length} characters`);
@@ -424,8 +424,8 @@ export const decodeAudio = (
       lastDetectedTime = currentTime;
     }
     
-    if (isReceivingMessage && (currentTime - transmissionStartTime > 15000)) {
-      console.log('⚠️ TRANSMISSION TIMEOUT - Force ending after 15 seconds');
+    if (isReceivingMessage && (currentTime - transmissionStartTime > 50000)) {
+      console.log('⚠️ TRANSMISSION TIMEOUT - Force ending after 50 seconds');
       const message = messageBuffer;
       
       isReceivingMessage = false;
@@ -535,4 +535,90 @@ export const resetDecoder = () => {
   transmissionStartTime = 0;
   recentCharacters = [];
   charFrequencyCounts.clear();
+};
+
+// Audio level monitoring
+export interface AudioLevel {
+  db: number;
+  percentage: number;
+  isSpeaking: boolean;
+}
+
+let analyserNode: AnalyserNode | null = null;
+let audioLevelCallback: ((level: AudioLevel) => void) | null = null;
+let monitoringAnimationFrameId: number | null = null;
+
+export const initializeAudioLevelMonitoring = (
+  audioContext: AudioContext,
+  stream: MediaStream,
+  onLevelUpdate: (level: AudioLevel) => void
+): void => {
+  try {
+    // Create analyser node
+    analyserNode = audioContext.createAnalyser();
+    analyserNode.fftSize = 2048;
+    
+    // Create source from microphone stream
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyserNode);
+    
+    audioLevelCallback = onLevelUpdate;
+    
+    logMessage('Audio level monitoring initialized');
+    
+    // Start monitoring
+    monitorAudioLevel();
+  } catch (error) {
+    console.error('Failed to initialize audio level monitoring:', error);
+  }
+};
+
+const monitorAudioLevel = (): void => {
+  if (!analyserNode || !audioLevelCallback) return;
+  
+  try {
+    const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+    analyserNode.getByteFrequencyData(dataArray);
+    
+    // Calculate RMS (root mean square) for more accurate level
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      const normalized = dataArray[i] / 255;
+      sum += normalized * normalized;
+    }
+    const rms = Math.sqrt(sum / dataArray.length);
+    
+    // Convert to dB (0-255 scale to dB)
+    // Range approximately -80dB to 0dB
+    const db = 20 * Math.log10(Math.max(rms, 0.0001)); // Avoid log(0)
+    
+    // Map dB to percentage (0-100)
+    // -80dB = 0%, 0dB = 100%
+    const percentage = Math.min(100, Math.max(0, ((db + 80) / 80) * 100));
+    
+    // Consider it "speaking" above -40dB
+    const isSpeaking = db > -40;
+    
+    audioLevelCallback({
+      db,
+      percentage,
+      isSpeaking
+    });
+    
+    // Continue monitoring
+    monitoringAnimationFrameId = requestAnimationFrame(monitorAudioLevel);
+  } catch (error) {
+    console.error('Error monitoring audio level:', error);
+  }
+};
+
+export const stopAudioLevelMonitoring = (): void => {
+  if (monitoringAnimationFrameId !== null) {
+    cancelAnimationFrame(monitoringAnimationFrameId);
+    monitoringAnimationFrameId = null;
+  }
+  analyserNode?.disconnect();
+  analyserNode = null;
+  audioLevelCallback = null;
+  logMessage('Audio level monitoring stopped');
 };

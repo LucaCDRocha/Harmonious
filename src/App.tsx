@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import './App.css';
 import FrequencyVisualizer from './components/FrequencyVisualizer';
+import AudioLevelIndicator from './components/AudioLevelIndicator';
 import { 
   encodeText, 
   decodeAudio, 
   resetDecoder, 
-  MAXIMUM_VALID_FREQUENCY 
+  MAXIMUM_VALID_FREQUENCY,
+  initializeAudioLevelMonitoring,
+  stopAudioLevelMonitoring,
+  AudioLevel
 } from './utils/audioCodec';
 
 // Add a console log to confirm the component is loading
@@ -61,6 +65,7 @@ function App() {
   const sentMessagesContainerRef = useRef<HTMLDivElement | null>(null);
   
   const [audioContextReady, setAudioContextReady] = useState<boolean>(false);
+  const [audioLevel, setAudioLevel] = useState<AudioLevel | null>(null);
   
   // Add useEffect to load the custom font stylesheet
   useEffect(() => {
@@ -193,6 +198,9 @@ function App() {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
+      
+      // Stop audio level monitoring
+      stopAudioLevelMonitoring();
       
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
@@ -837,6 +845,11 @@ function App() {
         
         // Connect the source to the analyzer
         source.connect(analyserRef.current);
+        
+        // Initialize audio level monitoring
+        initializeAudioLevelMonitoring(audioContext, streamRef.current, (level) => {
+          setAudioLevel(level);
+        });
         
         setIsListening(true);
         
@@ -1505,6 +1518,12 @@ function App() {
           key={`viz-${debugMsgCountRef.current % 10}`}
           transmitMode={transmitVisualization} // Pass prop to indicate transmission visualization
         />
+        
+        <div style={{ marginTop: '20px' }}>
+          <div className="section-title">&gt; AUDIO LEVEL</div>
+          <AudioLevelIndicator audioLevel={audioLevel} />
+        </div>
+        
         {!isListening && !systemInitialized && (
           <div className="status-indicator">SYSTEM INITIALIZING<span className="terminal-cursor">_</span></div>
         )}
