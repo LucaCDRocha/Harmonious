@@ -1,17 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './AudioLevelIndicator.css';
-import { AudioLevel } from '../utils/audioCodec';
+import { AudioLevel, stopAllOscillators } from '../utils/audioCodec';
+import { arduinoService } from '../utils/arduinoService';
 
 interface AudioLevelIndicatorProps {
   audioLevel: AudioLevel | null;
+  onAlertTriggered?: (isTriggered: boolean) => void;
+  isTransmitting?: boolean;
+  onTransmissionStop?: () => void;
+  onPlayEndMarker?: () => void;
+  alertPin?: number;
+  audioContext?: AudioContext;
 }
 
-const AudioLevelIndicator: React.FC<AudioLevelIndicatorProps> = ({ audioLevel }) => {
+const AudioLevelIndicator: React.FC<AudioLevelIndicatorProps> = ({ 
+  audioLevel,
+  onAlertTriggered,
+  isTransmitting = false,
+  onTransmissionStop,
+  onPlayEndMarker,
+  audioContext,
+  alertPin = 13
+}) => {
   const [showAlert, setShowAlert] = useState(false);
   const [showAlertStyling, setShowAlertStyling] = useState(false);
   const canTriggerAlertRef = useRef(true);
   const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const alertStylingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const alertToneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check if we've crossed the -10dB threshold
   useEffect(() => {
@@ -25,6 +41,24 @@ const AudioLevelIndicator: React.FC<AudioLevelIndicatorProps> = ({ audioLevel })
       setShowAlert(true);
       setShowAlertStyling(true);
 
+      // Notify parent component
+      if (onAlertTriggered) {
+        onAlertTriggered(true);
+      }
+
+      // If transmitting, STOP transmission immediately
+      if (isTransmitting && onTransmissionStop) {
+        console.log('🛑 High audio level detected during transmission - STOPPING IMMEDIATELY');
+        stopAllOscillators(); // Stop all currently playing oscillators
+        onTransmissionStop();
+      }
+
+      // Flash Arduino LED if connected
+      if (arduinoService.isConnected()) {
+        console.log('Alert triggered - flashing Arduino LED on pin', alertPin);
+        flashArduinoLED(alertPin);
+      }
+
       // Clear any existing timeouts
       if (alertTimeoutRef.current) {
         clearTimeout(alertTimeoutRef.current);
@@ -32,25 +66,40 @@ const AudioLevelIndicator: React.FC<AudioLevelIndicatorProps> = ({ audioLevel })
       if (alertStylingTimeoutRef.current) {
         clearTimeout(alertStylingTimeoutRef.current);
       }
+      if (alertToneTimeoutRef.current) {
+        clearTimeout(alertToneTimeoutRef.current);
+      }
+
+      // Play 5000 Hz tone for 4 seconds
+      play5000HzTone(4000);
 
       // Hide banner after 2.5 seconds
       alertTimeoutRef.current = setTimeout(() => {
         setShowAlert(false);
       }, 2500);
 
-      // Hide styling and reset alert capability after 3 seconds total
+      // After 5 seconds: Play end marker sound
       alertStylingTimeoutRef.current = setTimeout(() => {
         setShowAlertStyling(false);
         canTriggerAlertRef.current = true; // Allow alert to trigger again
-      }, 3000);
-
-      // Play alert sound
-      playAlertSound();
+        if (onAlertTriggered) {
+          onAlertTriggered(false);
+        }
+        // Play end marker after 5 seconds
+        if (onPlayEndMarker) {
+          console.log('🎵 Playing END MARKER after 5 seconds');
+          onPlayEndMarker();
+        }
+      }, 4500);
     } else if (!isAboveThreshold && !canTriggerAlertRef.current) {
       // Immediately reset if we drop below threshold while alert is active
       setShowAlert(false);
       setShowAlertStyling(false);
       canTriggerAlertRef.current = true;
+      
+      if (onAlertTriggered) {
+        onAlertTriggered(false);
+      }
       
       // Clear any existing timeouts
       if (alertTimeoutRef.current) {
@@ -68,8 +117,55 @@ const AudioLevelIndicator: React.FC<AudioLevelIndicatorProps> = ({ audioLevel })
       if (alertStylingTimeoutRef.current) {
         clearTimeout(alertStylingTimeoutRef.current);
       }
+      if (alertToneTimeoutRef.current) {
+        clearTimeout(alertToneTimeoutRef.current);
+      }
     };
-  }, [audioLevel]);
+  }, [audioLevel, onAlertTriggered, isTransmitting, onTransmissionStop, onPlayEndMarker, alertPin]);
+
+  const flashArduinoLED = async (pin: number) => {
+    try {
+      // Flash 3 times
+      for (let i = 0; i < 3; i++) {
+        await arduinoService.ledFlash(pin, 150);
+        // Wait between flashes
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+    } catch (error) {
+      console.error('Error flashing Arduino LED:', error);
+    }
+  };
+
+  const play5000HzTone = (duration: number) => {
+    try {
+      if (!audioContext) {
+        console.error('AudioContext not available');
+        return;
+      }
+      const now = audioContext.currentTime;
+
+      // Create 5000 Hz sine wave tone
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.frequency.value = 5000;
+      oscillator.type = 'sine';
+
+      // Set volume (start loud, fade out at end)
+      gainNode.gain.setValueAtTime(0.3, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration / 1000);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.start(now);
+      oscillator.stop(now + duration / 1000);
+
+      console.log('🔊 Playing 5000 Hz tone for', duration, 'ms');
+    } catch (error) {
+      console.log('Could not play 5000 Hz tone:', error);
+    }
+  };
 
   const playAlertSound = () => {
     try {

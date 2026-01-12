@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css';
 import FrequencyVisualizer from './components/FrequencyVisualizer';
 import AudioLevelIndicator from './components/AudioLevelIndicator';
+import ArduinoController from './components/ArduinoController';
 import { 
   encodeText, 
   decodeAudio, 
@@ -36,6 +37,12 @@ function App() {
   const [initialMessageShown, setInitialMessageShown] = useState<boolean>(false);
   // Add a ref to track the same state to avoid race conditions
   const initialMessageShownRef = useRef<boolean>(false);
+  
+  // Track if audio alert is currently triggered for Arduino control
+  const [alertTriggered, setAlertTriggered] = useState<boolean>(false);
+  
+  // Track transmission pause due to high audio level
+  const [transmissionPaused, setTransmissionPaused] = useState<boolean>(false);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -974,8 +981,9 @@ function App() {
         setDebugText('Failed to initialize audio for transmission');
         return;
       }
-      
+
       // Play the audio sequence with the new hexadecimal encoding
+      // (Transmission will be paused/resumed by AudioLevelIndicator via audioContext.suspend/resume)
       await encodeText(inputText, audioContext);
       
       // Calculate and display transmission statistics
@@ -1521,8 +1529,26 @@ function App() {
         
         <div style={{ marginTop: '20px' }}>
           <div className="section-title">&gt; AUDIO LEVEL</div>
-          <AudioLevelIndicator audioLevel={audioLevel} />
+          <AudioLevelIndicator 
+            audioLevel={audioLevel}
+            onAlertTriggered={setAlertTriggered}
+            isTransmitting={isTransmitting}
+            onTransmissionStop={() => setIsTransmitting(false)}
+            onPlayEndMarker={async () => {
+              if (audioContextRef.current) {
+                const { playEndMarker } = await import('./utils/audioCodec');
+                await playEndMarker(audioContextRef.current);
+              }
+            }}
+            alertPin={13}
+            audioContext={audioContextRef.current}
+          />
         </div>
+
+        <ArduinoController 
+          triggerAlertLED={alertTriggered}
+          alertPin={13}
+        />
         
         {!isListening && !systemInitialized && (
           <div className="status-indicator">SYSTEM INITIALIZING<span className="terminal-cursor">_</span></div>

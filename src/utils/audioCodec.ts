@@ -2,8 +2,8 @@
 console.log('Audio codec module loading...');
 
 // Constants for audio encoding
-export const START_FREQUENCY = 2500; // Hz
-export const END_FREQUENCY = 2700; // Hz
+export const START_FREQUENCY = 1000; // Hz
+export const END_FREQUENCY = 800; // Hz
 export const MINIMUM_VALID_FREQUENCY = 400;
 export const MAXIMUM_VALID_FREQUENCY = 8300;
 
@@ -20,8 +20,8 @@ const PARALLEL_TONE_OFFSET = 75; // Hz (even larger for deeper harmonics)
 const PARALLEL_TONE_VOLUME = 0.9; // Higher to emphasize rich harmonics
 
 // Whale-like modulation
-const USE_FREQUENCY_SWEEP = true; // Frequency modulation like whale song
-const SWEEP_RANGE = 120; // Hz range for frequency sweep (increased for more dramatic effect)
+const USE_FREQUENCY_SWEEP = false; // Frequency modulation like whale song
+const SWEEP_RANGE = 40; // Hz range for frequency sweep (increased for more dramatic effect)
 const VIBRATO_RATE = 4; // Hz (whale song vibrato)
 const VIBRATO_AMOUNT = 50; // Hz (vibrato depth - increased for more noticeable wobble)
 
@@ -36,14 +36,9 @@ const DEBUG_AUDIO = true;
 // Character to frequency mapping
 const CHAR_FREQUENCIES: { [char: string]: number } = {
   ' ': 900,
-  '!': 1300, '@': 1400, '#': 1500, '$': 1600, '%': 1700, '^': 1800, '&': 1900, '*': 2000,
-  '(': 2100, ')': 2200, '-': 2300, '_': 2400, '+': 2600, '=': 2800, '{': 2900, '}': 3000,
-  '[': 3100, ']': 3200, '|': 3300, '\\': 3400, ':': 3500, ';': 3600, '"': 3700, "'": 3800,
-  '<': 3900, '>': 4000, ',': 4100, '.': 4200, '/': 4300, '?': 4400, '`': 4500, '~': 4600,
-  '0': 4700, '1': 4800, '2': 4900, '3': 5000, '4': 5100, '5': 5200, '6': 5300, '7': 5400, '8': 5500, '9': 5600,
-  'A': 5700, 'B': 5800, 'C': 5900, 'D': 6000, 'E': 6100, 'F': 6200, 'G': 6300, 'H': 6400, 'I': 6500, 'J': 6600,
-  'K': 6700, 'L': 6800, 'M': 6900, 'N': 7000, 'O': 7100, 'P': 7200, 'Q': 7300, 'R': 7400, 'S': 7500, 'T': 7600,
-  'U': 7700, 'V': 7800, 'W': 7900, 'X': 8000, 'Y': 8100, 'Z': 500,
+  'A': 500, 'B': 600, 'C': 700, 'D': 1100, 'E': 1200, 'F': 1300, 'G': 1400, 'H': 1500, 'I': 1600, 'J': 1700,
+  'K': 1800, 'L': 1900, 'M': 2000, 'N': 2100, 'O': 2200, 'P': 2300, 'Q': 2400, 'R': 2500, 'S': 2600, 'T': 2700,
+  'U': 2800, 'V': 2900, 'W': 3000, 'X': 3100, 'Y': 3200, 'Z': 3300, '*': 5000
 };
 
 console.log(`Initialized frequency map for ${Object.keys(CHAR_FREQUENCIES).length} characters`);
@@ -60,6 +55,11 @@ let transmissionStartTime = 0;
 let recentCharacters: { char: string, time: number }[] = [];
 let charFrequencyCounts: Map<string, number> = new Map();
 
+// Track transmission pause state
+let isTransmissionPaused = false;
+let pauseStartTime = 0;
+let totalPausedDuration = 0;
+let activeOscillators: Array<{ oscillator: OscillatorNode | null; gainNode: GainNode; stopTime: number }> = [];
 const logMessage = (msg: string) => {
   if (DEBUG_AUDIO) {
     console.log(`%c${msg}`, 'color: #4a6bff; font-weight: bold;');
@@ -196,11 +196,87 @@ const frequencyToChar = (frequency: number): string | null => {
   return null;
 };
 
+/**
+ * Pause the transmission by muting and stopping active oscillators
+ */
+export const pauseTransmission = async (): Promise<void> => {
+  if (!isTransmissionPaused) {
+    console.log('⏸️ PAUSING TRANSMISSION - Stopping all active oscillators');
+    isTransmissionPaused = true;
+    pauseStartTime = performance.now();
+    
+    // Stop all active oscillators immediately by ramping gain to 0
+    activeOscillators.forEach(({ gainNode }) => {
+      try {
+        gainNode.gain.cancelScheduledValues(0);
+        gainNode.gain.setValueAtTime(0, 0);
+      } catch (e) {
+        // Already stopped or disposed
+      }
+    });
+  }
+};
+
+/**
+ * Resume the transmission - oscillators will resume from their scheduled times
+ */
+export const resumeTransmission = async (): Promise<void> => {
+  if (isTransmissionPaused) {
+    const pauseDuration = performance.now() - pauseStartTime;
+    totalPausedDuration += pauseDuration;
+    console.log(`▶️ RESUMING TRANSMISSION - Paused for ${pauseDuration.toFixed(0)}ms`);
+    isTransmissionPaused = false;
+    // Clear the active oscillators list as they've been muted
+    activeOscillators = [];
+  }
+};
+
+/**
+ * Get the transmission pause state
+ */
+export const getTransmissionPauseState = (): boolean => {
+  return isTransmissionPaused;
+};
+
+/**
+ * Stop all active oscillators immediately (for alert triggers)
+ */
+export const stopAllOscillators = (): void => {
+  try {
+    const now = performance.now();
+    for (const item of activeOscillators) {
+      if (item.oscillator) {
+        try {
+          item.oscillator.stop(0); // Stop immediately
+        } catch (e) {
+          // Oscillator may have already stopped
+        }
+      }
+    }
+    activeOscillators = [];
+    console.log(`🛑 Stopped all active oscillators at ${now.toFixed(0)}ms`);
+  } catch (error) {
+    console.error('Error stopping oscillators:', error);
+  }
+};
+/**
+ * Get total pause duration
+ */
+export const getTotalPausedDuration = (): number => {
+  return totalPausedDuration;
+};
+
+
 export const encodeText = async (
   text: string,
   audioContext: AudioContext
 ): Promise<void> => {
   return new Promise(async (resolve) => {
+    // Reset pause state and active oscillators for new transmission
+    isTransmissionPaused = false;
+    totalPausedDuration = 0;
+    activeOscillators = [];
+    
     const isReady = await ensureAudioContextReady(audioContext);
     if (!isReady) {
       console.error('Cannot encode text - AudioContext is not ready');
@@ -285,6 +361,11 @@ export const encodeText = async (
       const node = nodes[i];
       const { char, frequency, oscillator, gainNode, oscillator2, gainNode2 } = node;
       
+      // Wait if transmission is paused
+      while (isTransmissionPaused) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
       const fadeTime = Math.min(0.005, CHARACTER_DURATION / 12);
       
       gainNode.gain.setValueAtTime(0, currentTime);
@@ -295,6 +376,13 @@ export const encodeText = async (
       oscillator.start(currentTime);
       oscillator.stop(currentTime + CHARACTER_DURATION);
       
+      // Track this oscillator as active
+      activeOscillators.push({
+        oscillator,
+        gainNode,
+        stopTime: currentTime + CHARACTER_DURATION
+      });
+      
       if (USE_PARALLEL_TONES && oscillator2 && gainNode2) {
         gainNode2.gain.setValueAtTime(0, currentTime);
         gainNode2.gain.linearRampToValueAtTime(PARALLEL_TONE_VOLUME, currentTime + fadeTime);
@@ -303,6 +391,12 @@ export const encodeText = async (
         
         oscillator2.start(currentTime);
         oscillator2.stop(currentTime + CHARACTER_DURATION);
+        
+        activeOscillators.push({
+          oscillator: oscillator2,
+          gainNode: gainNode2,
+          stopTime: currentTime + CHARACTER_DURATION
+        });
       }
       
       if (i % 5 === 0 || i === nodes.length - 1) {
@@ -621,4 +715,29 @@ export const stopAudioLevelMonitoring = (): void => {
   analyserNode = null;
   audioLevelCallback = null;
   logMessage('Audio level monitoring stopped');
+};
+
+// Play end marker tone (800 Hz)
+export const playEndMarker = async (audioContext: AudioContext): Promise<void> => {
+  try {
+    const now = audioContext.currentTime;
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.value = END_FREQUENCY;
+    
+    gainNode.gain.setValueAtTime(0.3, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, now + END_MARKER_DURATION);
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.start(now);
+    oscillator.stop(now + END_MARKER_DURATION);
+    
+    console.log(`🎵 Playing END MARKER: ${END_FREQUENCY} Hz for ${END_MARKER_DURATION}s`);
+  } catch (error) {
+    console.error('Error playing end marker:', error);
+  }
 };
