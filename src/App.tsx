@@ -74,6 +74,227 @@ function App() {
   const [audioContextReady, setAudioContextReady] = useState<boolean>(false);
   const [audioLevel, setAudioLevel] = useState<AudioLevel | null>(null);
   
+  // State for automatic chat transmission
+  interface ChatMessages {
+    Fin: string[];
+    Blue: string[];
+  }
+  const [chatMessages, setChatMessages] = useState<ChatMessages | null>(null);
+  const [isAutoChatActive, setIsAutoChatActive] = useState(false);
+  const [selectedChatRobot, setSelectedChatRobot] = useState<'Fin' | 'Blue' | null>(null);
+  const [otherRobotListening, setOtherRobotListening] = useState(false);
+  const chatQueueRef = useRef<string[]>([]);
+  const isProcessingChatRef = useRef(false);
+  const currentChatRobotRef = useRef<'Fin' | 'Blue' | null>(null);
+  const messageIndexRef = useRef(0);
+  
+  // Create refs to track state for use in closures (updateFrequencies)
+  const isAutoChatActiveRef = useRef(false);
+  const otherRobotListeningRef = useRef(false);
+  const waitingForFirstSignalRef = useRef(false);
+  const isAutoChatTransmissionRef = useRef(false);
+  
+  // Create a function to process the next message - this wrapper ensures state access
+  const processNextChatMessageRef = useRef<() => Promise<void>>();
+  
+  // Load chat messages from JSON file
+  useEffect(() => {
+    const loadChatMessages = async () => {
+      try {
+        const response = await fetch('/chat.json');
+        const data: ChatMessages = await response.json();
+        setChatMessages(data);
+        console.log('Chat messages loaded:', data);
+      } catch (error) {
+        console.error('Error loading chat.json:', error);
+      }
+    };
+    
+    loadChatMessages();
+  }, []);
+  
+  // Keep refs in sync with state for use in animation frame callback
+  useEffect(() => {
+    isAutoChatActiveRef.current = isAutoChatActive;
+    console.log('[STATE] isAutoChatActive:', isAutoChatActive);
+  }, [isAutoChatActive]);
+  
+  useEffect(() => {
+    otherRobotListeningRef.current = otherRobotListening;
+    console.log('[STATE] otherRobotListening:', otherRobotListening);
+  }, [otherRobotListening]);
+  
+  // Auto-transmit messages from chat.json
+  const startAutoChat = useCallback(async () => {
+    if (!chatMessages) {
+      setDebugText('Chat messages not loaded yet');
+      return;
+    }
+    
+    // Default to FIN if not selected, or use the selected robot
+    const robotToStart = selectedChatRobot || 'Fin';
+    
+    // Set current robot and enable listening for other robot
+    currentChatRobotRef.current = robotToStart;
+    messageIndexRef.current = 0;
+    
+    // Create message sequence with only selected robot's messages
+    const finMessages = chatMessages.Fin;
+    const blueMessages = chatMessages.Blue;
+    
+    const sequence: string[] = [];
+    
+    if (robotToStart === 'Fin') {
+      // FIN only sends FIN messages
+      for (let i = 0; i < finMessages.length; i++) {
+        sequence.push(`[FIN]: ${finMessages[i]}`);
+      }
+    } else {
+      // BLUE only sends BLUE messages
+      for (let i = 0; i < blueMessages.length; i++) {
+        sequence.push(`[BLUE]: ${blueMessages[i]}`);
+      }
+    }
+    
+    chatQueueRef.current = sequence;
+    setIsAutoChatActive(true);
+    setOtherRobotListening(true);
+    
+    // If Blue is starting, wait for first [STREAM_END] signal before transmitting
+    if (robotToStart === 'Blue') {
+      waitingForFirstSignalRef.current = true;
+      setDebugText('Blue waiting for Fin to finish...');
+      console.log('[AUTO-CHAT] Blue is waiting for [STREAM_END] signal to start');
+    } else {
+      waitingForFirstSignalRef.current = false;
+      setDebugText('Fin starting...');
+      console.log('[AUTO-CHAT] Fin is starting immediately');
+    }
+    
+    console.log('[AUTO-CHAT] Full sequence queued:');
+    sequence.forEach((msg, idx) => {
+      console.log(`  [${idx}] ${msg}`);
+    });
+    
+    // Only start transmitting immediately if Fin is selected
+    // Blue will wait for [STREAM_END] signal
+    if (robotToStart === 'Fin') {
+      await processNextChatMessage();
+    }
+  }, [chatMessages, selectedChatRobot]);
+  
+  // Process next message in the chat queue
+  const processNextChatMessage = useCallback(async () => {
+    console.log(`[PROCESS] Queue length: ${chatQueueRef.current.length}, isProcessing: ${isProcessingChatRef.current}`);
+    
+    if (isProcessingChatRef.current || chatQueueRef.current.length === 0) {
+      if (chatQueueRef.current.length === 0 && isProcessingChatRef.current === false) {
+        console.log('[PROCESS] Chat complete - no more messages');
+        setIsAutoChatActive(false);
+        setOtherRobotListening(false);
+        addReceivedMessage('>>> AUTO-CHAT COMPLETE <<<');
+      }
+      return;
+    }
+    
+    isProcessingChatRef.current = true;
+    const message = chatQueueRef.current.shift();
+    
+    console.log(`[PROCESS] Processing message: "${message}"`);
+    console.log(`[PROCESS] Remaining in queue: ${chatQueueRef.current.length}`);
+    
+    if (!message) {
+      console.log('[PROCESS] Message is empty');
+      isProcessingChatRef.current = false;
+      setIsAutoChatActive(false);
+      return;
+    }
+    
+    // Determine which robot is speaking from the message
+    const isFinSpeaking = message.includes('[FIN]');
+    const isBlueSpeaking = message.includes('[BLUE]');
+    
+    if (isFinSpeaking || isBlueSpeaking) {
+      const robot: 'Fin' | 'Blue' = isFinSpeaking ? 'Fin' : 'Blue';
+      currentChatRobotRef.current = robot;
+      console.log(`[PROCESS] ${robot} is now transmitting`);
+    }
+    
+    // Display message as SENT (auto-chat messages are being transmitted)
+    const textToDisplay = `[SENT]: ${message}`;
+    addReceivedMessage(textToDisplay);
+    
+    try {
+      // Extract text to transmit (remove [FIN]: or [BLUE]: prefix)
+      const textToTransmit = message.split(']: ').pop() || message;
+      
+      console.log(`[TRANSMIT] Extracting: "${textToTransmit}" from "${message}"`);
+      
+      // Set transmission state - show TRANSMITTING for auto-chat too
+      isAutoChatTransmissionRef.current = true;
+      setIsTransmitting(true); // Show TRANSMITTING state during auto-chat
+      isActivelyTransmittingRef.current = true;
+      setTransmitVisualization(true);
+      
+      // Get audio context
+      const audioContext = await getAudioContext();
+      if (!audioContext) {
+        console.error('[TRANSMIT] Failed to get audio context');
+        isProcessingChatRef.current = false;
+        setIsTransmitting(false);
+        isActivelyTransmittingRef.current = false;
+        setTransmitVisualization(false);
+        setTimeout(() => processNextChatMessage(), 1500);
+        return;
+      }
+      
+      // Record start time for statistics
+      transmissionStartTime.current = performance.now();
+      
+      // Transmit as audio (same way as manual transmission)
+      console.log(`[TRANSMIT] Starting audio transmission for: "${textToTransmit}"`);
+      await encodeText(textToTransmit, audioContext);
+      console.log(`[TRANSMIT] Audio transmission complete`);
+      
+      // Calculate and display transmission statistics
+      const endTime = performance.now();
+      const duration = (endTime - transmissionStartTime.current) / 1000;
+      const charCount = textToTransmit.length;
+      const charsPerSecond = charCount / duration;
+      
+      setTxStats({
+        charCount,
+        duration,
+        charsPerSecond
+      });
+    } catch (error) {
+      console.error('[TRANSMIT] Error transmitting auto-chat message:', error);
+    } finally {
+      // Clear transmission state
+      isAutoChatTransmissionRef.current = false;
+      setIsTransmitting(false);
+      isActivelyTransmittingRef.current = false;
+      setTransmitVisualization(false);
+      
+      // Reset status indicator
+      const statusIndicator = document.querySelector('.status-indicator');
+      if (statusIndicator) {
+        statusIndicator.textContent = "STANDBY";
+        statusIndicator.classList.remove('transmitting');
+      }
+      
+      isProcessingChatRef.current = false;
+      
+      // After transmission, wait for [STREAM_END] to trigger other robot's response
+      // (handled in updateFrequencies when [STREAM_END] is detected)
+    }
+  }, []);
+  
+  // Update the ref with the latest function so listeners can access current state
+  useEffect(() => {
+    processNextChatMessageRef.current = processNextChatMessage;
+  }, [processNextChatMessage]);
+  
   // Add useEffect to load the custom font stylesheet
   useEffect(() => {
     // Create a style element to add the @font-face declaration
@@ -660,6 +881,14 @@ function App() {
               }
               
               setDebugText("Receiving transmission...");
+              
+              // LISTENER BEHAVIOR: If in auto-chat mode and other robot is listening
+              if (isAutoChatActiveRef.current && otherRobotListeningRef.current && currentChatRobotRef.current) {
+                // The other robot heard the start signal
+                const otherRobot: 'Fin' | 'Blue' = currentChatRobotRef.current === 'Fin' ? 'Blue' : 'Fin';
+                console.log(`[LISTENER] ${otherRobot} detected ${currentChatRobotRef.current}'s [STREAM_START] - will respond after current transmission ends`);
+                setDebugText(`${otherRobot} listening... waiting for ${currentChatRobotRef.current} to finish`);
+              }
             }
             // Handle streaming content
             else if (decodedText && decodedText.startsWith("[STREAM]") && isCurrentlyStreaming && !isTransmitting && !isActivelyTransmittingRef.current) {
@@ -691,6 +920,39 @@ function App() {
               if (statusIndicator && !isTransmitting && !isActivelyTransmittingRef.current) {
                 statusIndicator.textContent = "RECEIVING";
                 statusIndicator.classList.remove('streaming');
+              }
+              
+              // CHECK IF BLUE IS WAITING FOR FIRST SIGNAL
+              if (waitingForFirstSignalRef.current && isAutoChatActiveRef.current) {
+                console.log(`[LISTENER] Blue detected first [STREAM_END] signal - starting transmission`);
+                waitingForFirstSignalRef.current = false;
+                setDebugText('Blue responding...');
+                
+                // Small delay before Blue responds
+                setTimeout(async () => {
+                  console.log(`[LISTENER] Blue starting first message...`);
+                  if (processNextChatMessageRef.current) {
+                    await processNextChatMessageRef.current();
+                  } else {
+                    console.error('[LISTENER] processNextChatMessageRef is not available!');
+                  }
+                }, 500);
+              }
+              // LISTENER BEHAVIOR: If in auto-chat mode, automatically trigger next robot's response
+              else if (isAutoChatActiveRef.current && otherRobotListeningRef.current) {
+                console.log(`[LISTENER] [STREAM_END] detected - checking queue for next message`);
+                console.log(`[LISTENER] Queue has ${chatQueueRef.current.length} messages remaining`);
+                console.log(`[LISTENER] Next message in queue: "${chatQueueRef.current[0] || 'NONE'}"`);
+                
+                // Small delay before next robot responds (simulates natural conversation)
+                setTimeout(async () => {
+                  console.log(`[LISTENER] Triggering next message transmission...`);
+                  if (processNextChatMessageRef.current) {
+                    await processNextChatMessageRef.current();
+                  } else {
+                    console.error('[LISTENER] processNextChatMessageRef is not available!');
+                  }
+                }, 500);
               }
               
               // Handle timeout case specifically
@@ -940,6 +1202,8 @@ function App() {
   const transmitMessage = async () => {
     if (!inputText || isTransmitting) return;
     
+    console.log('[MANUAL TRANSMIT] Starting manual transmission:', inputText);
+    
     // Set both the state and the ref
     setIsTransmitting(true);
     isActivelyTransmittingRef.current = true;
@@ -964,9 +1228,12 @@ function App() {
     // Update status indicator to show "TRANSMITTING" only
     const statusIndicator = document.querySelector('.status-indicator');
     if (statusIndicator) {
+      console.log('[MANUAL TRANSMIT] Setting status to TRANSMITTING');
       statusIndicator.textContent = "TRANSMITTING";
       statusIndicator.classList.add('transmitting');
       statusIndicator.classList.remove('streaming'); // Make sure streaming class is removed
+    } else {
+      console.warn('[MANUAL TRANSMIT] Status indicator not found!');
     }
     
     try {
@@ -1463,6 +1730,13 @@ function App() {
           Test Message
         </button>
         <button 
+          onClick={startAutoChat}
+          className={isAutoChatActive ? 'auto-chat active' : 'auto-chat'}
+          disabled={isAutoChatActive || !chatMessages}
+        >
+          {isAutoChatActive ? 'CHAT ACTIVE...' : 'START AUTO CHAT'}
+        </button>
+        <button 
           onClick={() => {
             setUseMockData(!useMockData);
             setDebugText(`Mode: ${!useMockData ? 'Using mock data' : 'Using real microphone'}`);
@@ -1518,6 +1792,73 @@ function App() {
           </div>
         </div>
       )}
+      
+      {/* Auto-Chat Button Section - Always Visible */}
+      <div style={{ 
+        marginBottom: '20px', 
+        display: 'flex', 
+        justifyContent: 'center',
+        gap: '10px',
+        flexDirection: 'column',
+        alignItems: 'center'
+      }}>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            onClick={() => setSelectedChatRobot('Fin')}
+            disabled={isAutoChatActive}
+            style={{
+              height: '45px',
+              minWidth: '100px',
+              padding: '8px 15px',
+              backgroundColor: selectedChatRobot === 'Fin' ? '#00f0ff' : 'transparent',
+              color: selectedChatRobot === 'Fin' ? '#000000' : '#00f0ff',
+              border: '2px solid #00f0ff',
+              cursor: isAutoChatActive ? 'not-allowed' : 'pointer',
+              fontSize: '0.9rem',
+              fontWeight: 'bold',
+              fontFamily: 'Courier New, monospace',
+              textTransform: 'uppercase',
+              borderRadius: '0',
+              transition: 'all 0.3s ease',
+              opacity: isAutoChatActive ? 0.5 : 1
+            }}
+          >
+            FIN
+          </button>
+          <button 
+            onClick={() => setSelectedChatRobot('Blue')}
+            disabled={isAutoChatActive}
+            style={{
+              height: '45px',
+              minWidth: '100px',
+              padding: '8px 15px',
+              backgroundColor: selectedChatRobot === 'Blue' ? '#00f0ff' : 'transparent',
+              color: selectedChatRobot === 'Blue' ? '#000000' : '#00f0ff',
+              border: '2px solid #00f0ff',
+              cursor: isAutoChatActive ? 'not-allowed' : 'pointer',
+              fontSize: '0.9rem',
+              fontWeight: 'bold',
+              fontFamily: 'Courier New, monospace',
+              textTransform: 'uppercase',
+              borderRadius: '0',
+              transition: 'all 0.3s ease',
+              opacity: isAutoChatActive ? 0.5 : 1
+            }}
+          >
+            BLUE
+          </button>
+        </div>
+        
+        {(selectedChatRobot === 'Fin' || selectedChatRobot === 'Blue') && (
+          <button 
+            onClick={startAutoChat}
+            className={isAutoChatActive ? 'auto-chat active' : 'auto-chat'}
+            disabled={isAutoChatActive || !chatMessages}
+          >
+            {isAutoChatActive ? 'CHAT ACTIVE...' : 'START AUTO CHAT'}
+          </button>
+        )}
+      </div>
       
       <div className="visualizer-container">
         <div className="section-title">&gt; FREQUENCY ANALYSIS</div>

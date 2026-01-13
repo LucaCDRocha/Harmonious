@@ -131,7 +131,17 @@ h1:after {
 }
 
 button {
+  display: block;
+}
+
+/* Hide control buttons specifically */
+.controls button {
   display: none;
+}
+
+/* Show the auto-chat button specifically */
+.auto-chat {
+  display: inline-flex !important;
 }
 
 /* Remove button styling but keep the clear functionality visible */
@@ -1010,4 +1020,43 @@ body.mobile .transmit-container button {
 body.mobile textarea,
 body.mobile button {
   min-height: 44px; /* Apple's recommended minimum touch target size */
+}
+/* Auto-Chat Button Styling */
+.auto-chat {
+  display: block !important;
+  height: 50px !important;
+  min-height: 50px !important;
+  max-height: 50px !important;
+  padding: 10px 20px !important;
+  font-size: 0.9rem !important;
+  font-weight: bold !important;
+  background-color: transparent !important;
+  border: 2px solid var(--secondary-accent) !important;
+  color: var(--secondary-accent) !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  text-transform: uppercase !important;
+  letter-spacing: 1px !important;
+  font-family: var(--mono-font) !important;
+  border-radius: 0 !important;
+  width: auto !important;
+}
+
+.auto-chat:hover:not(:disabled) {
+  background-color: rgba(0, 240, 255, 0.1);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+}
+
+.auto-chat.active {
+  background-color: var(--secondary-accent);
+  color: #000000;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.6);
+  text-shadow: none;
+  font-weight: bold;
+}
+
+.auto-chat:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
