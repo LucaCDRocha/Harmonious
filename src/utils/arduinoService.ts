@@ -150,6 +150,52 @@ class ArduinoService {
   }
 
   /**
+   * Send servo start command (triggers continuous servo loop)
+   */
+  async servoStart(): Promise<boolean> {
+    if (!this.connection.isConnected || !this.connection.writer) {
+      console.warn('Arduino not connected. Servo start command queued.');
+      return false;
+    }
+
+    try {
+      const command = 'SERVO,START\n';
+      const encoder = new TextEncoder();
+      const data = encoder.encode(command);
+
+      await this.connection.writer.write(data);
+      console.log('Sent servo start command to Arduino');
+      return true;
+    } catch (error) {
+      console.error('Error sending servo start command to Arduino:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send servo stop command (stops servo loop and returns to start position)
+   */
+  async servoStop(): Promise<boolean> {
+    if (!this.connection.isConnected || !this.connection.writer) {
+      console.warn('Arduino not connected. Servo stop command queued.');
+      return false;
+    }
+
+    try {
+      const command = 'SERVO,STOP\n';
+      const encoder = new TextEncoder();
+      const data = encoder.encode(command);
+
+      await this.connection.writer.write(data);
+      console.log('Sent servo stop command to Arduino');
+      return true;
+    } catch (error) {
+      console.error('Error sending servo stop command to Arduino:', error);
+      return false;
+    }
+  }
+
+  /**
    * Listen for incoming data from Arduino
    */
   private async listenForData(): Promise<void> {

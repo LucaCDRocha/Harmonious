@@ -12,6 +12,7 @@ import {
   stopAudioLevelMonitoring,
   AudioLevel
 } from './utils/audioCodec';
+import { arduinoService } from './utils/arduinoService';
 
 // Add a console log to confirm the component is loading
 console.log('Chirp system initializing');
@@ -236,6 +237,12 @@ function App() {
       isActivelyTransmittingRef.current = true;
       setTransmitVisualization(true);
       
+      // Send servo start command to Arduino
+      if (arduinoService.isConnected()) {
+        await arduinoService.servoStart();
+        console.log('[AUTO-CHAT] Servo loop started via Arduino');
+      }
+      
       // Get audio context
       const audioContext = await getAudioContext();
       if (!audioContext) {
@@ -270,6 +277,12 @@ function App() {
     } catch (error) {
       console.error('[TRANSMIT] Error transmitting auto-chat message:', error);
     } finally {
+      // Send servo stop command to Arduino
+      if (arduinoService.isConnected()) {
+        await arduinoService.servoStop();
+        console.log('[AUTO-CHAT] Servo loop stopped via Arduino');
+      }
+      
       // Clear transmission state
       isAutoChatTransmissionRef.current = false;
       setIsTransmitting(false);
@@ -1208,6 +1221,12 @@ function App() {
     setIsTransmitting(true);
     isActivelyTransmittingRef.current = true;
     
+    // Send servo start command to Arduino
+    if (arduinoService.isConnected()) {
+      await arduinoService.servoStart();
+      console.log('Servo loop started via Arduino');
+    }
+    
     // Add logging to trace transmission state changes
     console.log('TRANSMISSION STARTED - Blocking all receiving modes');
     
@@ -1285,6 +1304,12 @@ function App() {
       console.error('Error transmitting message:', error);
       setDebugText(`Transmission error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
+      // Send servo stop command to Arduino
+      if (arduinoService.isConnected()) {
+        await arduinoService.servoStop();
+        console.log('Servo loop stopped via Arduino');
+      }
+      
       // Set both the state and the ref
       setIsTransmitting(false);
       isActivelyTransmittingRef.current = false;
