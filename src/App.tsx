@@ -487,17 +487,32 @@ function App() {
   const getAudioContext = async () => {
     // If no context exists, create a new one
     if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      analyserRef.current.fftSize = 2048;
-      analyserRef.current.smoothingTimeConstant = 0.5; // Even less smoothing for better detection
+      console.log('[AUDIO] Creating new AudioContext...');
+      try {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        console.log('[AUDIO] AudioContext created, state:', audioContextRef.current.state);
+        console.log('[AUDIO] Sample rate:', audioContextRef.current.sampleRate);
+        analyserRef.current = audioContextRef.current.createAnalyser();
+        analyserRef.current.fftSize = 2048;
+        analyserRef.current.smoothingTimeConstant = 0.5; // Even less smoothing for better detection
+      } catch (error) {
+        console.error('[AUDIO] Error creating AudioContext:', error);
+        return null;
+      }
     }
     
     // If context is suspended, resume it
     if (audioContextRef.current.state === 'suspended') {
-      await audioContextRef.current.resume();
+      console.log('[AUDIO] AudioContext suspended, attempting to resume...');
+      try {
+        await audioContextRef.current.resume();
+        console.log('[AUDIO] AudioContext resumed, new state:', audioContextRef.current.state);
+      } catch (error) {
+        console.error('[AUDIO] Error resuming AudioContext:', error);
+      }
     }
     
+    console.log('[AUDIO] Final AudioContext state:', audioContextRef.current.state);
     setAudioContextReady(audioContextRef.current.state === 'running');
     return audioContextRef.current;
   };
@@ -1467,6 +1482,9 @@ function App() {
     try {
       // Check if we have an AudioContext already
       const wasRunningBefore = audioContextRef.current?.state === 'running';
+      
+      console.log('[INIT] Initializing audio on user interaction...');
+      console.log('[INIT] Browser:', navigator.userAgent);
       
       // Try to get/initialize audio context
       await getAudioContext();
