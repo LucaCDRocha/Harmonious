@@ -32,6 +32,9 @@ int potVal;             // variable to read the value from the analog pin
 int angle;              // variable to hold the angle for the servo motor
 bool loopActive = false; // flag to control servo loop
 bool alertActive = false; // flag to control alert oscillation
+bool manualControl = false; // flag for manual potentiometer control
+int lastButtonState = LOW; // previous button state
+int buttonState = LOW; // current button state
 
 void setup() {
   myServo.attach(9);   // attaches the servo on pin 9 to the servo object
@@ -41,6 +44,33 @@ void setup() {
 }
 
 void loop() {
+  // Read button state
+  buttonState = digitalRead(buttonPin);
+  
+  // Check for button press (transition from LOW to HIGH)
+  if (buttonState == HIGH && lastButtonState == LOW) {
+    manualControl = !manualControl; // Toggle manual control mode
+    loopActive = false; // Stop automatic loop when entering manual mode
+    alertActive = false; // Stop alert when entering manual mode
+    
+    if (manualControl) {
+      Serial.println("Manual control activated - Use potentiometer to set angle");
+    } else {
+      Serial.println("Manual control deactivated");
+    }
+    delay(50); // Simple debounce
+  }
+  lastButtonState = buttonState;
+  
+  // If manual control is active, use potentiometer to control servo
+  if (manualControl) {
+    potVal = analogRead(potPin);
+    angle = map(potVal, 0, 1023, startAngle, endAngle);
+    myServo.write(angle);
+    delay(15);
+    return; // Skip the rest of the loop when in manual mode
+  }
+  
   // Check for incoming serial commands from web app
   if (Serial.available() > 0) {
     String command = Serial.readStringUntil('\n');
@@ -51,6 +81,7 @@ void loop() {
     if (command.startsWith("SERVO,START")) {
       loopActive = true;
       alertActive = false;
+      manualControl = false; // Disable manual control when starting automatic loop
       Serial.println("Transmission started - Servo loop activated");
     } 
     else if (command.startsWith("SERVO,STOP")) {
@@ -62,6 +93,7 @@ void loop() {
     else if (command.startsWith("SERVO,ALERT")) {
       alertActive = true;
       loopActive = false;
+      manualControl = false; // Disable manual control when alert is triggered
       Serial.println("Alert triggered - Rapid oscillation activated");
     }
   }
