@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './AudioLevelIndicator.css';
-import { AudioLevel, stopAllOscillators } from '../utils/audioCodec';
+import { AudioLevel, stopAllOscillators, encodeText } from '../utils/audioCodec';
 import { arduinoService } from '../utils/arduinoService';
 
 interface AudioLevelIndicatorProps {
@@ -53,10 +53,13 @@ const AudioLevelIndicator: React.FC<AudioLevelIndicatorProps> = ({
         onTransmissionStop();
       }
 
-      // Flash Arduino LED if connected
+      // Flash Arduino LED and trigger servo alert if connected
       if (arduinoService.isConnected()) {
         console.log('Alert triggered - flashing Arduino LED on pin', alertPin);
         flashArduinoLED(alertPin);
+        // Trigger rapid servo oscillation
+        arduinoService.servoAlert();
+        console.log('Alert triggered - servo rapid oscillation activated');
       }
 
       // Clear any existing timeouts
@@ -70,27 +73,33 @@ const AudioLevelIndicator: React.FC<AudioLevelIndicatorProps> = ({
         clearTimeout(alertToneTimeoutRef.current);
       }
 
-      // Play 5000 Hz tone for 4 seconds
-      play5000HzTone(4000);
+      // Send alert signal - just play 5000 Hz tone (no encoding)
+      if (audioContext) {
+        console.log('🔊 Sending alert signal to other robot (5000 Hz tone)');
+        play5000HzTone(3000);
+      }
 
       // Hide banner after 2.5 seconds
       alertTimeoutRef.current = setTimeout(() => {
         setShowAlert(false);
       }, 2500);
 
-      // After 5 seconds: Play end marker sound
+      // After 3 seconds: Play end marker sound (only if not transmitting)
       alertStylingTimeoutRef.current = setTimeout(() => {
         setShowAlertStyling(false);
         canTriggerAlertRef.current = true; // Allow alert to trigger again
         if (onAlertTriggered) {
           onAlertTriggered(false);
         }
-        // Play end marker after 5 seconds
-        if (onPlayEndMarker) {
-          console.log('🎵 Playing END MARKER after 5 seconds');
+        // Play end marker only if we were NOT transmitting when alert triggered
+        // (if we were transmitting, the transmission was interrupted and shouldn't play end marker)
+        if (onPlayEndMarker && !isTransmitting) {
+          console.log('🎵 Playing END MARKER after 3 seconds');
           onPlayEndMarker();
+        } else if (isTransmitting) {
+          console.log('🔇 Skipping END MARKER - transmission was interrupted by alert');
         }
-      }, 4500);
+      }, 3000);
     } else if (!isAboveThreshold && !canTriggerAlertRef.current) {
       // Immediately reset if we drop below threshold while alert is active
       setShowAlert(false);

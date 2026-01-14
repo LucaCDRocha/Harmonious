@@ -125,6 +125,48 @@ function App() {
     console.log('[STATE] otherRobotListening:', otherRobotListening);
   }, [otherRobotListening]);
   
+  // Handle alert trigger to stop and reset auto chat
+  useEffect(() => {
+    if (alertTriggered && isAutoChatActive) {
+      console.log('[ALERT] Alert triggered during auto chat - stopping and resetting');
+      
+      // Stop auto chat
+      setIsAutoChatActive(false);
+      isProcessingChatRef.current = false;
+      
+      // Clear the queue
+      chatQueueRef.current = [];
+      
+      // Reset to first message
+      messageIndexRef.current = 0;
+      
+      // Stop any active transmission
+      if (isActivelyTransmittingRef.current) {
+        setIsTransmitting(false);
+        isActivelyTransmittingRef.current = false;
+        setTransmitVisualization(false);
+      }
+      
+      // Reset other robot listening state
+      setOtherRobotListening(false);
+      waitingForFirstSignalRef.current = false;
+      
+      // Add message to display
+      addReceivedMessage('>>> AUTO-CHAT STOPPED BY ALERT - RESTARTING IN 5 SECONDS <<<');
+      
+      console.log('[ALERT] Auto chat reset complete - will restart in 5 seconds');
+      
+      // Automatically restart auto chat after 5 seconds
+      setTimeout(() => {
+        if (selectedChatRobot) {
+          console.log('[ALERT] Auto-restarting chat as', selectedChatRobot);
+          // Call startAutoChat - safe to use without dependency since it's stable
+          startAutoChat();
+        }
+      }, 5000);
+    }
+  }, [alertTriggered, isAutoChatActive, selectedChatRobot]);
+  
   // Auto-transmit messages from chat.json
   const startAutoChat = useCallback(async () => {
     if (!chatMessages) {
@@ -861,6 +903,31 @@ function App() {
         debugMsgCountRef.current++;
       }
       
+      // Check for 5000 Hz alert signal (before other processing)
+      // This should work even during transmission
+      const alertFrequency = 5000;
+      const alertTolerance = 100; // Hz
+      const alertBin = Math.round((alertFrequency / nyquistFrequency) * dataArray.length);
+      const alertBinStart = Math.max(0, Math.round(((alertFrequency - alertTolerance) / nyquistFrequency) * dataArray.length));
+      const alertBinEnd = Math.min(dataArray.length - 1, Math.round(((alertFrequency + alertTolerance) / nyquistFrequency) * dataArray.length));
+      
+      // Check if we have a strong signal around 5000 Hz
+      let alertSignalStrength = 0;
+      for (let i = alertBinStart; i <= alertBinEnd; i++) {
+        alertSignalStrength = Math.max(alertSignalStrength, dataArray[i]);
+      }
+      
+      // If we detect a strong 5000 Hz signal, trigger alert
+      if (alertSignalStrength > 150) {
+        console.log('[ALERT] Detected 5000 Hz alert signal from other robot (strength:', alertSignalStrength, ')');
+        setAlertTriggered(true);
+        
+        // Reset alert after a delay
+        setTimeout(() => {
+          setAlertTriggered(false);
+        }, 500);
+      }
+      
       // CRITICAL CHECK: Do not attempt to decode audio if transmitting
       if (isTransmitting || isActivelyTransmittingRef.current) {
         // Skip all audio decoding when transmitting
@@ -941,7 +1008,7 @@ function App() {
                 waitingForFirstSignalRef.current = false;
                 setDebugText('Blue responding...');
                 
-                // Small delay before Blue responds
+                // Delay before Blue responds
                 setTimeout(async () => {
                   console.log(`[LISTENER] Blue starting first message...`);
                   if (processNextChatMessageRef.current) {
@@ -949,7 +1016,7 @@ function App() {
                   } else {
                     console.error('[LISTENER] processNextChatMessageRef is not available!');
                   }
-                }, 500);
+                }, 2000);
               }
               // LISTENER BEHAVIOR: If in auto-chat mode, automatically trigger next robot's response
               else if (isAutoChatActiveRef.current && otherRobotListeningRef.current) {
@@ -957,7 +1024,7 @@ function App() {
                 console.log(`[LISTENER] Queue has ${chatQueueRef.current.length} messages remaining`);
                 console.log(`[LISTENER] Next message in queue: "${chatQueueRef.current[0] || 'NONE'}"`);
                 
-                // Small delay before next robot responds (simulates natural conversation)
+                // Delay before next robot responds (simulates natural conversation)
                 setTimeout(async () => {
                   console.log(`[LISTENER] Triggering next message transmission...`);
                   if (processNextChatMessageRef.current) {
@@ -965,7 +1032,7 @@ function App() {
                   } else {
                     console.error('[LISTENER] processNextChatMessageRef is not available!');
                   }
-                }, 500);
+                }, 2000);
               }
               
               // Handle timeout case specifically

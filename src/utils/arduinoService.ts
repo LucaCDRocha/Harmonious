@@ -196,6 +196,29 @@ class ArduinoService {
   }
 
   /**
+   * Send servo alert command (triggers rapid oscillation for alert)
+   */
+  async servoAlert(): Promise<boolean> {
+    if (!this.connection.isConnected || !this.connection.writer) {
+      console.warn('Arduino not connected. Servo alert command queued.');
+      return false;
+    }
+
+    try {
+      const command = 'SERVO,ALERT\n';
+      const encoder = new TextEncoder();
+      const data = encoder.encode(command);
+
+      await this.connection.writer.write(data);
+      console.log('Sent servo alert command to Arduino');
+      return true;
+    } catch (error) {
+      console.error('Error sending servo alert command to Arduino:', error);
+      return false;
+    }
+  }
+
+  /**
    * Listen for incoming data from Arduino
    */
   private async listenForData(): Promise<void> {
