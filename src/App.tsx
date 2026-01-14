@@ -94,6 +94,7 @@ function App() {
   const otherRobotListeningRef = useRef(false);
   const waitingForFirstSignalRef = useRef(false);
   const isAutoChatTransmissionRef = useRef(false);
+  const alertCooldownRef = useRef(false); // Flag to prevent actions during alert cooldown
   
   // Create a function to process the next message - this wrapper ensures state access
   const processNextChatMessageRef = useRef<() => Promise<void>>();
@@ -127,12 +128,16 @@ function App() {
   
   // Handle alert trigger to stop and reset auto chat
   useEffect(() => {
-    if (alertTriggered && isAutoChatActive) {
+    if (alertTriggered && isAutoChatActive && !alertCooldownRef.current) {
       console.log('[ALERT] Alert triggered during auto chat - stopping and resetting');
       
-      // Stop auto chat
+      // Set cooldown flag to prevent duplicate resets
+      alertCooldownRef.current = true;
+      
+      // Stop auto chat immediately
       setIsAutoChatActive(false);
       isProcessingChatRef.current = false;
+      isAutoChatTransmissionRef.current = false;
       
       // Clear the queue
       chatQueueRef.current = [];
@@ -149,21 +154,39 @@ function App() {
       
       // Reset other robot listening state
       setOtherRobotListening(false);
-      waitingForFirstSignalRef.current = false;
+      setIsCurrentlyStreaming(false);
+      currentStreamingText.current = '';
       
       // Add message to display
-      addReceivedMessage('>>> AUTO-CHAT STOPPED BY ALERT - RESTARTING IN 5 SECONDS <<<');
+      addReceivedMessage('>>> AUTO-CHAT STOPPED BY ALERT - RESTARTING IN 8 SECONDS <<<');
       
-      console.log('[ALERT] Auto chat reset complete - will restart in 5 seconds');
+      console.log('[ALERT] Auto chat reset complete - will restart in 8 seconds');
       
-      // Automatically restart auto chat after 5 seconds
+      // Automatically restart auto chat after 8 seconds
+      // Fin starts immediately, Blue waits for signal
       setTimeout(() => {
         if (selectedChatRobot) {
           console.log('[ALERT] Auto-restarting chat as', selectedChatRobot);
+          
+          // Reset the waiting state properly based on robot
+          if (selectedChatRobot === 'Blue') {
+            waitingForFirstSignalRef.current = true;
+            console.log('[ALERT] Blue will wait for Fin signal before starting');
+          } else {
+            waitingForFirstSignalRef.current = false;
+            console.log('[ALERT] Fin will start immediately');
+          }
+          
+          // Clear cooldown flag
+          alertCooldownRef.current = false;
+          
           // Call startAutoChat - safe to use without dependency since it's stable
           startAutoChat();
+        } else {
+          // Clear cooldown even if no robot selected
+          alertCooldownRef.current = false;
         }
-      }, 5000);
+      }, 8000);
     }
   }, [alertTriggered, isAutoChatActive, selectedChatRobot]);
   
@@ -229,6 +252,12 @@ function App() {
   // Process next message in the chat queue
   const processNextChatMessage = useCallback(async () => {
     console.log(`[PROCESS] Queue length: ${chatQueueRef.current.length}, isProcessing: ${isProcessingChatRef.current}`);
+    
+    // Don't process during alert cooldown
+    if (alertCooldownRef.current) {
+      console.log('[PROCESS] Skipping - in alert cooldown period');
+      return;
+    }
     
     if (isProcessingChatRef.current || chatQueueRef.current.length === 0) {
       if (chatQueueRef.current.length === 0 && isProcessingChatRef.current === false) {
@@ -1003,7 +1032,7 @@ function App() {
               }
               
               // CHECK IF BLUE IS WAITING FOR FIRST SIGNAL
-              if (waitingForFirstSignalRef.current && isAutoChatActiveRef.current) {
+              if (waitingForFirstSignalRef.current && isAutoChatActiveRef.current && !alertCooldownRef.current) {
                 console.log(`[LISTENER] Blue detected first [STREAM_END] signal - starting transmission`);
                 waitingForFirstSignalRef.current = false;
                 setDebugText('Blue responding...');
@@ -1011,15 +1040,17 @@ function App() {
                 // Delay before Blue responds
                 setTimeout(async () => {
                   console.log(`[LISTENER] Blue starting first message...`);
-                  if (processNextChatMessageRef.current) {
+                  if (processNextChatMessageRef.current && !alertCooldownRef.current) {
                     await processNextChatMessageRef.current();
+                  } else if (alertCooldownRef.current) {
+                    console.log('[LISTENER] Skipping - in alert cooldown');
                   } else {
                     console.error('[LISTENER] processNextChatMessageRef is not available!');
                   }
-                }, 2000);
+                }, 3000);
               }
               // LISTENER BEHAVIOR: If in auto-chat mode, automatically trigger next robot's response
-              else if (isAutoChatActiveRef.current && otherRobotListeningRef.current) {
+              else if (isAutoChatActiveRef.current && otherRobotListeningRef.current && !alertCooldownRef.current) {
                 console.log(`[LISTENER] [STREAM_END] detected - checking queue for next message`);
                 console.log(`[LISTENER] Queue has ${chatQueueRef.current.length} messages remaining`);
                 console.log(`[LISTENER] Next message in queue: "${chatQueueRef.current[0] || 'NONE'}"`);
@@ -1027,12 +1058,14 @@ function App() {
                 // Delay before next robot responds (simulates natural conversation)
                 setTimeout(async () => {
                   console.log(`[LISTENER] Triggering next message transmission...`);
-                  if (processNextChatMessageRef.current) {
+                  if (processNextChatMessageRef.current && !alertCooldownRef.current) {
                     await processNextChatMessageRef.current();
+                  } else if (alertCooldownRef.current) {
+                    console.log('[LISTENER] Skipping - in alert cooldown');
                   } else {
                     console.error('[LISTENER] processNextChatMessageRef is not available!');
                   }
-                }, 2000);
+                }, 3000);
               }
               
               // Handle timeout case specifically
