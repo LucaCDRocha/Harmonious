@@ -960,11 +960,11 @@ function App() {
 
       // Calculate the maximum frequency value for debugging
       let maxValue = 0;
-      let maxBin = 0;
+      // let maxBin = 0;
       for (let i = 0; i < dataArray.length; i++) {
         if (dataArray[i] > maxValue) {
           maxValue = dataArray[i];
-          maxBin = i;
+          // maxBin = i;
         }
       }
       
@@ -1528,7 +1528,6 @@ function App() {
     // Clear previous initialization state
     sessionStorage.removeItem('initialMessageShown');
     initialMessageShownRef.current = false;
-    setInitialMessageShown(false);
     
     // Auto initialize the system with a small delay, but don't show message yet
     const initTimeout = setTimeout(() => {
@@ -1569,7 +1568,6 @@ function App() {
         // Now show the RECEIVING DATA message when the AudioContext starts
         addReceivedMessage("RECEIVING DATA...", true);
         initialMessageShownRef.current = true;
-        setInitialMessageShown(true);
         sessionStorage.setItem('initialMessageShown', 'true');
         console.log('Audio context started, showing initial message');
       }

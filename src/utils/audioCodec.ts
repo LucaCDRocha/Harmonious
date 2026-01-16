@@ -50,7 +50,7 @@ let startMarkerDetectionCount = 0;
 let endMarkerDetectionCount = 0;
 let lastDetectedFrequency = 0;
 let lastDetectedTime = 0;
-let lastDetectedChar = '';
+// let lastDetectedChar = '';
 let transmissionStartTime = 0;
 let recentCharacters: { char: string, time: number }[] = [];
 let charFrequencyCounts: Map<string, number> = new Map();
@@ -600,7 +600,7 @@ export const decodeAudio = (
           if (shouldAddCharacter(upperChar)) {
             console.log(`Adding character '${upperChar}' to message buffer`);
             messageBuffer += upperChar;
-            lastDetectedChar = upperChar;
+            // lastDetectedChar = upperChar;
             
             return "[STREAM]" + upperChar;
           } else {
@@ -625,7 +625,7 @@ export const resetDecoder = () => {
   endMarkerDetectionCount = 0;
   lastDetectedFrequency = 0;
   lastDetectedTime = 0;
-  lastDetectedChar = '';
+  // lastDetectedChar = '';
   transmissionStartTime = 0;
   recentCharacters = [];
   charFrequencyCounts.clear();
