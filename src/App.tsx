@@ -89,6 +89,11 @@ function App() {
   const currentChatRobotRef = useRef<'Fin' | 'Blue' | null>(null);
   const messageIndexRef = useRef(0);
   
+  // State for auto-idle mode
+  const [isAutoIdleActive, setIsAutoIdleActive] = useState(false);
+  const autoIdleIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isAutoIdleRunningRef = useRef(false);
+  
   // Create refs to track state for use in closures (updateFrequencies)
   const isAutoChatActiveRef = useRef(false);
   const otherRobotListeningRef = useRef(false);
@@ -189,6 +194,122 @@ function App() {
       }, 8000);
     }
   }, [alertTriggered, isAutoChatActive, selectedChatRobot]);
+  
+  // Auto-idle mode: continuously run idle animation and play alert on loud sounds
+  const startAutoIdle = useCallback(async () => {
+    if (isAutoIdleRunningRef.current) {
+      console.log('[AUTO-IDLE] Already running');
+      return;
+    }
+    
+    console.log('[AUTO-IDLE] Starting auto-idle mode');
+    setIsAutoIdleActive(true);
+    isAutoIdleRunningRef.current = true;
+    
+    // Start continuous servo animation - no stopping until explicit stop or alert
+    try {
+      if (arduinoService.isConnected()) {
+        console.log('[AUTO-IDLE] Starting continuous servo idle animation');
+        await arduinoService.servoStart();
+        addReceivedMessage('>>> AUTO-IDLE MODE ACTIVATED - CONTINUOUS ANIMATION <<<');
+      } else {
+        console.warn('[AUTO-IDLE] Arduino not connected');
+        addReceivedMessage('>>> AUTO-IDLE MODE ACTIVATED (NO ARDUINO) <<<');
+      }
+    } catch (error) {
+      console.error('[AUTO-IDLE] Error starting servo:', error);
+    }
+  }, []);
+  
+  const stopAutoIdle = useCallback(async () => {
+    console.log('[AUTO-IDLE] Stopping auto-idle mode');
+    isAutoIdleRunningRef.current = false;
+    setIsAutoIdleActive(false);
+    
+    if (autoIdleIntervalRef.current) {
+      clearInterval(autoIdleIntervalRef.current);
+      autoIdleIntervalRef.current = null;
+    }
+    
+    // Stop the continuous servo animation
+    try {
+      if (arduinoService.isConnected()) {
+        await arduinoService.servoStop();
+        console.log('[AUTO-IDLE] Servo stopped');
+      }
+    } catch (error) {
+      console.error('[AUTO-IDLE] Error stopping servo:', error);
+    }
+    
+    addReceivedMessage('>>> AUTO-IDLE MODE DEACTIVATED <<<');
+  }, []);
+  
+  // Handle alert during auto-idle: use same process as sending messages
+  useEffect(() => {
+    if (alertTriggered && isAutoIdleActive) {
+      console.log('[AUTO-IDLE] Alert triggered - stop idle, play alert, restart idle');
+      
+      // Handle alert using same pattern as message transmission
+      const handleAlert = async () => {
+        try {
+          // Stop current idle animation
+          if (arduinoService.isConnected()) {
+            await arduinoService.servoStop();
+            console.log('[AUTO-IDLE] Idle animation stopped');
+            // Small delay to ensure stop command is processed
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+          addReceivedMessage('>>> ALERT: LOUD SOUND DETECTED <<<');
+          
+          // Start alert animation (rapid oscillation)
+          if (arduinoService.isConnected()) {
+            await arduinoService.servoAlert();
+            console.log('[AUTO-IDLE] Alert animation started');
+          }
+          
+          // Wait for alert to complete (matching the alert tone duration)
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          // Stop alert animation explicitly before restarting idle
+          if (arduinoService.isConnected()) {
+            await arduinoService.servoStop();
+            console.log('[AUTO-IDLE] Alert animation stopped');
+            // Small delay to ensure stop command is processed
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+          // Automatically restart idle animation
+          if (isAutoIdleRunningRef.current && arduinoService.isConnected()) {
+            await arduinoService.servoStart();
+            console.log('[AUTO-IDLE] Idle animation automatically restarted');
+          }
+        } catch (error) {
+          console.error('[AUTO-IDLE] Error handling alert:', error);
+          // Try to restart idle even if there was an error
+          if (isAutoIdleRunningRef.current && arduinoService.isConnected()) {
+            try {
+              await arduinoService.servoStart();
+              console.log('[AUTO-IDLE] Idle animation restarted after error');
+            } catch (restartError) {
+              console.error('[AUTO-IDLE] Failed to restart idle:', restartError);
+            }
+          }
+        }
+      };
+      
+      handleAlert();
+    }
+  }, [alertTriggered, isAutoIdleActive]);
+  
+  // Clean up auto-idle on unmount
+  useEffect(() => {
+    return () => {
+      if (isAutoIdleRunningRef.current) {
+        stopAutoIdle();
+      }
+    };
+  }, [stopAutoIdle]);
   
   // Auto-transmit messages from chat.json
   const startAutoChat = useCallback(async () => {
@@ -2001,6 +2122,30 @@ function App() {
             {isAutoChatActive ? 'CHAT ACTIVE...' : 'START AUTO CHAT'}
           </button>
         )}
+        
+        {/* Auto-Idle Button */}
+        <button 
+          onClick={isAutoIdleActive ? stopAutoIdle : startAutoIdle}
+          style={{
+            height: '50px',
+            minWidth: '220px',
+            padding: '10px 20px',
+            backgroundColor: isAutoIdleActive ? '#ff41b4' : 'transparent',
+            color: isAutoIdleActive ? '#000000' : '#00ffaa',
+            border: '2px solid #00ffaa',
+            cursor: 'pointer',
+            fontSize: '1rem',
+            fontWeight: 'bold',
+            fontFamily: 'Courier New, monospace',
+            textTransform: 'uppercase',
+            borderRadius: '0',
+            transition: 'all 0.3s ease',
+            marginTop: '10px',
+            boxShadow: isAutoIdleActive ? '0 0 20px rgba(0, 255, 170, 0.5)' : 'none'
+          }}
+        >
+          {isAutoIdleActive ? '◼ STOP AUTO-IDLE' : '▶ START AUTO-IDLE'}
+        </button>
       </div>
       
       <div className="visualizer-container">
