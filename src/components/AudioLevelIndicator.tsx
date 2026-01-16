@@ -172,7 +172,6 @@ const AudioLevelIndicator: React.FC<AudioLevelIndicatorProps> = ({
 
       console.log('🔊 Playing 5000 Hz tone for', duration, 'ms');
     } catch (error) {
-    } catch (error) {
       console.log('Could not play 5000 Hz tone:', error);
     }
   };
