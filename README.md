@@ -2,6 +2,14 @@
 
 A minimal audio-based text communication system that encodes text into sound frequencies and decodes them back.
 
+**Based on the [Chirp](https://github.com/solst-ice/chirp) project by [solst/ICE](https://github.com/solst-ice)**
+
+This project extends the original Chirp audio transmission system with:
+
+- Auto-idle mode for continuous robot animation
+- Alert system with automatic restart
+- Integration with Arduino servo control
+
 ## Quick Start
 
 ```bash
