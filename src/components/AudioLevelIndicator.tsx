@@ -172,49 +172,8 @@ const AudioLevelIndicator: React.FC<AudioLevelIndicatorProps> = ({
 
       console.log('🔊 Playing 5000 Hz tone for', duration, 'ms');
     } catch (error) {
-      console.log('Could not play 5000 Hz tone:', error);
-    }
-  };
-
-  /* Unused function - commented out for build
-  const playAlertSound = () => {
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const now = audioContext.currentTime;
-
-      // Create alert tone - two beeps
-      const oscillator1 = audioContext.createOscillator();
-      const gainNode1 = audioContext.createGain();
-
-      oscillator1.frequency.value = 800;
-      oscillator1.type = 'sine';
-
-      gainNode1.gain.setValueAtTime(0.3, now);
-      gainNode1.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-
-      oscillator1.connect(gainNode1);
-      gainNode1.connect(audioContext.destination);
-
-      oscillator1.start(now);
-      oscillator1.stop(now + 0.1);
-
-      // Second beep
-      const oscillator2 = audioContext.createOscillator();
-      const gainNode2 = audioContext.createGain();
-
-      oscillator2.frequency.value = 1000;
-      oscillator2.type = 'sine';
-
-      gainNode2.gain.setValueAtTime(0.3, now + 0.15);
-      gainNode2.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
-
-      oscillator2.connect(gainNode2);
-      gainNode2.connect(audioContext.destination);
-
-      oscillator2.start(now + 0.15);
-      oscillator2.stop(now + 0.25);
     } catch (error) {
-      console.log('Could not play alert sound:', error);
+      console.log('Could not play 5000 Hz tone:', error);
     }
   };
 

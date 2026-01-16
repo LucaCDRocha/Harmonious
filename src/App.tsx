@@ -675,55 +675,8 @@ function App() {
   }, [isListening]);
   
   /**
-   * Format a message with timestamp and appropriate styling
+   * Function to directly update UI with a received message
    */
-  /* Unused function - commented out for build
-  const formatMessage = (message: string, type: string): string => {
-    const timestamp = new Date().toLocaleTimeString();
-    
-    // Add the appropriate class based on message type
-    let className = '';
-    
-    if (type === 'sent') {
-      className = 'sent-message';
-    } else if (type === 'streaming') {
-      className = 'streaming-message';
-      // MODIFIED: Allow special characters in streaming messages
-      // Only filter out control characters
-      message = message.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
-    } else if (type === 'timeout') {
-      className = 'timeout-message';
-    } else {
-      className = 'received-message';
-    }
-    
-    // Special handling for sent messages to ensure consistency
-    if (message.includes("[SENT]")) {
-      const timestamp = message.match(/\[\d{2}:\d{2}:\d{2}\]/);
-      let cleanMessage = message;
-      
-      if (timestamp) {
-        // Extract the part after [SENT]
-        const sentParts = message.split("[SENT]");
-        if (sentParts.length > 1) {
-          const messageContent = sentParts[1].trim();
-          // Create a simpler format with direct styling
-          cleanMessage = `<div class="sent-message-direct" style="color: #00ff41; border-left: 4px solid #00ff41; background-color: rgba(0, 20, 0, 0.4); padding-left: 8px;">${timestamp[0]} <strong class="sent-indicator" style="color: #00ff41;">[SENT]</strong> ${messageContent}</div>`;
-          
-          console.log("Using ultra-simplified sent message format:", cleanMessage);
-          return cleanMessage;
-        }
-      }
-    }
-    
-    // Format with timestamp on a new line
-    return `<div class="${className}">
-      <div>${message}</div>
-      <div class="timestamp">${timestamp}</div>
-    </div>`;
-  };
-
-  // Function to directly update UI with a received message
   const addReceivedMessage = (message: string, isStreamingMessage = false) => {
     // Only log actual messages, not empty ones
     if (message.trim()) {
@@ -1623,19 +1576,6 @@ function App() {
     } catch (error) {
       console.error('Error initializing AudioContext:', error);
       setDebugText(`Audio init error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-  
-  // Function to clear received messages with direct DOM access
-  /* Unused function - commented out for build
-  const clearMessages = () => {
-    // Remove setReceivedMessage call
-    // setReceivedMessage(''); // Clear the message display
-    receivedMessagesRef.current.clear(); // Clear the received messages set
-    
-    // Clear the sent messages container
-    if (sentMessagesContainerRef.current) {
-      sentMessagesContainerRef.current.innerHTML = '';
     }
   };
   
