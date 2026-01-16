@@ -3,7 +3,8 @@
   border: 2px solid #00ff41;
   border-radius: 8px;
   padding: 16px;
-  margin: 16px 0;
+  margin-top: auto;
+  margin-bottom: 0;
   font-family: 'Courier New', monospace;
   color: #00ff41;
 }

@@ -2029,11 +2029,6 @@ function App() {
           />
         </div>
 
-        <ArduinoController 
-          triggerAlertLED={alertTriggered}
-          alertPin={13}
-        />
-        
         {!isListening && !systemInitialized && (
           <div className="status-indicator">SYSTEM INITIALIZING<span className="terminal-cursor">_</span></div>
         )}
@@ -2059,6 +2054,11 @@ function App() {
           </div>
         )}
       </div>
+      
+      <ArduinoController 
+        triggerAlertLED={alertTriggered}
+        alertPin={13}
+      />
       
       <div className="message-transmit-wrapper">
         <div className="message-container">
