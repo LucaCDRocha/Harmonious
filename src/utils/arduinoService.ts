@@ -3,8 +3,15 @@
  * Used to control LED lights when audio level alerts are triggered
  */
 
+// Type declaration for Web Serial API
+declare global {
+  interface Navigator {
+    serial: any;
+  }
+}
+
 interface ArduinoConnection {
-  port: SerialPort | null;
+  port: any;
   reader: ReadableStreamDefaultReader<Uint8Array> | null;
   writer: WritableStreamDefaultWriter<Uint8Array> | null;
   isConnected: boolean;
@@ -20,7 +27,7 @@ class ArduinoService {
 
   private baudRate = 9600; // Standard Arduino baud rate
   private commandQueue: string[] = [];
-  private isProcessingQueue = false;
+  // private isProcessingQueue = false;
 
   /**
    * Check if the Web Serial API is supported

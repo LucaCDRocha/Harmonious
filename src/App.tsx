@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import './App.css';
 import FrequencyVisualizer from './components/FrequencyVisualizer';
 import AudioLevelIndicator from './components/AudioLevelIndicator';
@@ -34,16 +34,11 @@ function App() {
     charsPerSecond: number;
   } | null>(null);
   
-  // Add a state variable to track if initial message has been shown
-  const [initialMessageShown, setInitialMessageShown] = useState<boolean>(false);
   // Add a ref to track the same state to avoid race conditions
   const initialMessageShownRef = useRef<boolean>(false);
   
   // Track if audio alert is currently triggered for Arduino control
   const [alertTriggered, setAlertTriggered] = useState<boolean>(false);
-  
-  // Track transmission pause due to high audio level
-  const [transmissionPaused, setTransmissionPaused] = useState<boolean>(false);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -55,8 +50,6 @@ function App() {
   const lastReceivedTextRef = useRef<string | null>(null);
   const lastReceivedTimeRef = useRef<number>(0);
   const debugMsgCountRef = useRef<number>(0);
-  const visualizerUpdateCountRef = useRef<number>(0);
-  const [directUI, setDirectUI] = useState<boolean>(true); // Enable direct UI updates
   const [useMockData, setUseMockData] = useState<boolean>(false); // Add mock data option
   const [compatibilityMode, setCompatibilityMode] = useState<boolean>(true);
   const [sendTestMessages, setSendTestMessages] = useState<boolean>(false);
@@ -684,6 +677,7 @@ function App() {
   /**
    * Format a message with timestamp and appropriate styling
    */
+  /* Unused function - commented out for build
   const formatMessage = (message: string, type: string): string => {
     const timestamp = new Date().toLocaleTimeString();
     
@@ -1021,7 +1015,7 @@ function App() {
         }
       }
       
-      const dominantFreq = maxBin * audioContextRef.current.sampleRate / (dataArray.length * 2);
+      // const dominantFreq = maxBin * audioContextRef.current.sampleRate / (dataArray.length * 2);
       
       // Update debug text more infrequently and without frequency details
       if (debugMode && debugMsgCountRef.current % 30 === 0) {
@@ -1072,7 +1066,7 @@ function App() {
       // This should work even during transmission
       const alertFrequency = 5000;
       const alertTolerance = 100; // Hz
-      const alertBin = Math.round((alertFrequency / nyquistFrequency) * dataArray.length);
+      // const alertBin = Math.round((alertFrequency / nyquistFrequency) * dataArray.length);
       const alertBinStart = Math.max(0, Math.round(((alertFrequency - alertTolerance) / nyquistFrequency) * dataArray.length));
       const alertBinEnd = Math.min(dataArray.length - 1, Math.round(((alertFrequency + alertTolerance) / nyquistFrequency) * dataArray.length));
       
@@ -1633,6 +1627,7 @@ function App() {
   };
   
   // Function to clear received messages with direct DOM access
+  /* Unused function - commented out for build
   const clearMessages = () => {
     // Remove setReceivedMessage call
     // setReceivedMessage(''); // Clear the message display
@@ -2170,7 +2165,7 @@ function App() {
               }
             }}
             alertPin={13}
-            audioContext={audioContextRef.current}
+            audioContext={audioContextRef.current || undefined}
           />
         </div>
 

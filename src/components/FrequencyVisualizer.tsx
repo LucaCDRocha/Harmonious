@@ -32,7 +32,7 @@ const FrequencyVisualizer: React.FC<FrequencyVisualizerProps> = ({
     ctx.lineWidth = 1;
     
     const numDivisions = 10;
-    const divisionWidth = canvas.width / numDivisions;
+    // const divisionWidth = canvas.width / numDivisions;
     
     // Draw frequency scale (Hz) at the bottom
     const maxFreq = MAXIMUM_VALID_FREQUENCY; // Use imported constant

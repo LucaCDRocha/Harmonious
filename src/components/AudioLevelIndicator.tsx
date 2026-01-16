@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './AudioLevelIndicator.css';
-import { AudioLevel, stopAllOscillators, encodeText } from '../utils/audioCodec';
+import { AudioLevel, stopAllOscillators } from '../utils/audioCodec';
 import { arduinoService } from '../utils/arduinoService';
 
 interface AudioLevelIndicatorProps {
@@ -176,6 +176,7 @@ const AudioLevelIndicator: React.FC<AudioLevelIndicatorProps> = ({
     }
   };
 
+  /* Unused function - commented out for build
   const playAlertSound = () => {
     try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
