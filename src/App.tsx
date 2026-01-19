@@ -101,10 +101,68 @@ function App() {
   useEffect(() => {
     const loadChatMessages = async () => {
       try {
-        const response = await fetch('/chat.json');
-        const data: ChatMessages = await response.json();
-        setChatMessages(data);
-        console.log('Chat messages loaded:', data);
+        // Try multiple paths for different deployment scenarios
+        const paths = [
+          `${import.meta.env.BASE_URL}chat.json`, // Vite base URL (e.g., /Harmonious/chat.json)
+          '/chat.json',
+          './chat.json',
+          '/Harmonious/chat.json',
+          '/seaToLand/chat.json'
+        ];
+        
+        let loaded = false;
+        for (const path of paths) {
+          try {
+            console.log(`Attempting to load chat.json from: ${path}`);
+            const response = await fetch(path);
+            
+            if (!response.ok) {
+              console.warn(`Failed to fetch from ${path}: ${response.status} ${response.statusText}`);
+              continue;
+            }
+            
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+              console.warn(`Wrong content type from ${path}: ${contentType}`);
+              continue;
+            }
+            
+            const data: ChatMessages = await response.json();
+            setChatMessages(data);
+            console.log('Chat messages loaded successfully from:', path, data);
+            loaded = true;
+            break;
+          } catch (err) {
+            console.warn(`Error trying path ${path}:`, err);
+          }
+        }
+        
+        if (!loaded) {
+          console.error('Failed to load chat.json from any path');
+          // Fallback to hardcoded messages
+          const fallbackData: ChatMessages = {
+            "Fin": [
+              "HI",
+              "YOUR NAME",
+              "FIN",
+              "HI BLUE",
+              "LOTS OF BOATS",
+              "WATER IS NOT LIKE BEFORE",
+              "OKAY BYE"
+            ],
+            "Blue": [
+              "HI",
+              "BLUE YOU",
+              "HI FIN",
+              "WATER IS CHANGING",
+              "YES TOO MUCH NOISE",
+              "THAT IS TRUE",
+              "OKAY BYE"
+            ]
+          };
+          setChatMessages(fallbackData);
+          console.log('Using fallback chat messages:', fallbackData);
+        }
       } catch (error) {
         console.error('Error loading chat.json:', error);
       }
@@ -362,6 +420,46 @@ function App() {
       await processNextChatMessage();
     }
   }, [chatMessages, selectedChatRobot]);
+  
+  // Stop auto-chat
+  const stopAutoChat = useCallback(async () => {
+    console.log('[AUTO-CHAT] Manually stopping auto chat');
+    
+    // Stop auto chat immediately
+    setIsAutoChatActive(false);
+    isProcessingChatRef.current = false;
+    isAutoChatTransmissionRef.current = false;
+    
+    // Clear the queue
+    chatQueueRef.current = [];
+    
+    // Reset to first message
+    messageIndexRef.current = 0;
+    
+    // Stop any active transmission
+    if (isActivelyTransmittingRef.current) {
+      setIsTransmitting(false);
+      isActivelyTransmittingRef.current = false;
+      setTransmitVisualization(false);
+      
+      // Stop servo if connected
+      if (arduinoService.isConnected()) {
+        await arduinoService.servoStop();
+        console.log('[AUTO-CHAT] Servo stopped');
+      }
+    }
+    
+    // Reset other robot listening state
+    setOtherRobotListening(false);
+    setIsCurrentlyStreaming(false);
+    currentStreamingText.current = '';
+    
+    // Add message to display
+    addReceivedMessage('>>> AUTO-CHAT STOPPED MANUALLY <<<');
+    
+    setDebugText('Auto-chat stopped');
+    console.log('[AUTO-CHAT] Auto chat stopped manually');
+  }, []);
   
   // Process next message in the chat queue
   const processNextChatMessage = useCallback(async () => {
@@ -2047,13 +2145,38 @@ function App() {
         </div>
         
         {(selectedChatRobot === 'Fin' || selectedChatRobot === 'Blue') && (
-          <button 
-            onClick={startAutoChat}
-            className={isAutoChatActive ? 'auto-chat active' : 'auto-chat'}
-            disabled={isAutoChatActive || !chatMessages}
-          >
-            {isAutoChatActive ? 'CHAT ACTIVE...' : 'START AUTO CHAT'}
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={startAutoChat}
+              className={isAutoChatActive ? 'auto-chat active' : 'auto-chat'}
+              disabled={isAutoChatActive || !chatMessages}
+            >
+              {isAutoChatActive ? 'CHAT ACTIVE...' : 'START AUTO CHAT'}
+            </button>
+            {isAutoChatActive && (
+              <button 
+                onClick={stopAutoChat}
+                style={{
+                  height: '50px',
+                  minWidth: '180px',
+                  padding: '10px 20px',
+                  backgroundColor: '#ff4444',
+                  color: '#ffffff',
+                  border: '2px solid #ff6666',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: 'bold',
+                  fontFamily: 'Courier New, monospace',
+                  textTransform: 'uppercase',
+                  borderRadius: '0',
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 0 20px rgba(255, 68, 68, 0.5)'
+                }}
+              >
+                ◼ STOP AUTO-CHAT
+              </button>
+            )}
+          </div>
         )}
         
         {/* Auto-Idle Button */}
